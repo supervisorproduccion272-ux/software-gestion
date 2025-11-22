@@ -89,14 +89,6 @@ class RegistroOrdenController extends Controller
 
         $query = TablaOriginal::query();
 
-        // Filtro por defecto para supervisores: "En Ejecución" (pero puede cambiarse)
-        if (auth()->user() && auth()->user()->role && auth()->user()->role->name === 'supervisor') {
-            // Si no hay filtro de estado en la URL, aplicar "En Ejecución" por defecto
-            if (!$request->has('filter_estado')) {
-                $query->where('estado', 'En Ejecución');
-            }
-        }
-
         // Apply search filter - search by 'pedido' or 'cliente'
         if ($request->has('search') && !empty($request->search)) {
             $searchTerm = $request->search;
@@ -113,7 +105,6 @@ class RegistroOrdenController extends Controller
         foreach ($request->all() as $key => $value) {
             if (str_starts_with($key, 'filter_') && !empty($value)) {
                 $column = str_replace('filter_', '', $key);
-                
                 // Usar separador especial para valores que pueden contener comas y saltos de línea
                 $separator = '|||FILTER_SEPARATOR|||';
                 $values = explode($separator, $value);
@@ -157,6 +148,13 @@ class RegistroOrdenController extends Controller
                                     // Si falla, intentar buscar el valor tal cual
                                     $q->orWhere($column, $dateValue);
                                 }
+                            }
+                        });
+                    } elseif ($column === 'cliente') {
+                        // Para cliente, usar LIKE para búsqueda parcial (como en el buscador)
+                        $query->where(function($q) use ($values) {
+                            foreach ($values as $value) {
+                                $q->orWhere('cliente', 'LIKE', '%' . $value . '%');
                             }
                         });
                     } else {
@@ -218,6 +216,16 @@ class RegistroOrdenController extends Controller
         } else {
             // Optimización: Reducir paginación de 50 a 25 para mejor performance
             $ordenes = $query->paginate(25);
+            
+            // DEBUG: Log de paginación
+            \Log::info("=== PAGINACIÓN DEBUG ===");
+            \Log::info("Total: {$ordenes->total()}");
+            \Log::info("Página actual: {$ordenes->currentPage()}");
+            \Log::info("Última página: {$ordenes->lastPage()}");
+            \Log::info("Por página: {$ordenes->perPage()}");
+            \Log::info("Tiene búsqueda: " . ($request->has('search') ? 'SÍ' : 'NO'));
+            \Log::info("Búsqueda: " . ($request->search ?? 'N/A'));
+            \Log::info("HTML paginación: " . substr($ordenes->links()->toHtml(), 0, 200));
 
             // Cálculo optimizado con caché para TODAS las órdenes visibles
             $totalDiasCalculados = $this->calcularTotalDiasBatchConCache($ordenes->items(), $festivos);
@@ -227,6 +235,13 @@ class RegistroOrdenController extends Controller
         $areaOptions = $this->getEnumOptions('tabla_original', 'area');
 
         if ($request->wantsJson()) {
+            $paginationHtml = $ordenes->appends(request()->query())->links()->toHtml();
+            
+            \Log::info("=== PAGINACIÓN HTML ===");
+            \Log::info("Total: {$ordenes->total()}");
+            \Log::info("Última página: {$ordenes->lastPage()}");
+            \Log::info("HTML generado (primeros 500 chars): " . substr($paginationHtml, 0, 500));
+            
             return response()->json([
                 'orders' => $ordenes->items(),
                 'totalDiasCalculados' => $totalDiasCalculados,
@@ -239,7 +254,7 @@ class RegistroOrdenController extends Controller
                     'from' => $ordenes->firstItem(),
                     'to' => $ordenes->lastItem(),
                 ],
-                'pagination_html' => $ordenes->appends(request()->query())->links()->toHtml()
+                'pagination_html' => $paginationHtml
             ]);
         }
 
