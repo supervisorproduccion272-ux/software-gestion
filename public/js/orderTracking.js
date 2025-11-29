@@ -212,6 +212,7 @@ function calculateBusinessDays(startDate, endDate, festivos = []) {
  * Calcula los días que pasó en cada área hasta la siguiente
  * Para el área actual, cuenta hasta hoy
  * Excluye sábados, domingos y festivos (igual que total_de_dias)
+ * IMPORTANTE: Solo muestra áreas hasta el área actual (inclusive)
  */
 async function getOrderTrackingPath(order) {
     const path = [];
@@ -236,6 +237,10 @@ async function getOrderTrackingPath(order) {
         'Despachos'
     ];
     
+    // Obtener el área actual de la orden
+    const currentArea = order.area || null;
+    console.log('📍 Área actual de la orden:', currentArea);
+    
     // Obtener todas las áreas con fechas
     const areasWithDates = [];
     for (const area of areaOrder) {
@@ -259,18 +264,33 @@ async function getOrderTrackingPath(order) {
     // Esto asegura que el conteo de días sea correcto según la secuencia real
     areasWithDates.sort((a, b) => a.date.getTime() - b.date.getTime());
     
+    // Filtrar áreas: solo mostrar hasta el área actual (inclusive)
+    let filteredAreas = areasWithDates;
+    if (currentArea && currentArea !== 'Sin seleccionar') {
+        // Encontrar el índice del área actual
+        const currentAreaIndex = areaOrder.indexOf(currentArea);
+        
+        // Filtrar las áreas para que solo incluya hasta el área actual
+        filteredAreas = areasWithDates.filter(item => {
+            const itemIndex = areaOrder.indexOf(item.area);
+            return itemIndex <= currentAreaIndex;
+        });
+        
+        console.log('🔍 Áreas filtradas hasta el área actual:', filteredAreas.map(a => a.area));
+    }
+    
     // Calcular días en cada área
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
     let totalDiasModal = 0;
     
-    // Encontrar el índice del área "Despachos" si existe
-    const despachosIndex = areasWithDates.findIndex(a => a.area === 'Despachos');
+    // Encontrar el índice del área "Despachos" si existe en las áreas filtradas
+    const despachosIndex = filteredAreas.findIndex(a => a.area === 'Despachos');
     
-    for (let i = 0; i < areasWithDates.length; i++) {
-        const current = areasWithDates[i];
-        const next = areasWithDates[i + 1];
+    for (let i = 0; i < filteredAreas.length; i++) {
+        const current = filteredAreas[i];
+        const next = filteredAreas[i + 1];
         
         let daysInArea = 0;
         
@@ -286,7 +306,7 @@ async function getOrderTrackingPath(order) {
                 daysInArea = 0;
             } else if (despachosIndex !== -1 && i < despachosIndex) {
                 // Si hay despachos después de esta área, contar hasta despachos
-                const despachosDate = areasWithDates[despachosIndex].date;
+                const despachosDate = filteredAreas[despachosIndex].date;
                 daysInArea = calculateBusinessDays(current.date, despachosDate, festivos);
             } else {
                 // Si no hay despachos o es la última área sin despachos, contar hasta hoy
