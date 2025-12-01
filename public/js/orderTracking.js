@@ -270,9 +270,22 @@ async function getOrderTrackingPath(order) {
         // Encontrar el índice del área actual
         const currentAreaIndex = areaOrder.indexOf(currentArea);
         
+        // Obtener el campo de fecha del área actual
+        const currentAreaMapping = areaFieldMappings[currentArea];
+        const currentAreaDateField = currentAreaMapping ? currentAreaMapping.dateField : null;
+        
         // Filtrar las áreas para que solo incluya hasta el área actual
         filteredAreas = areasWithDates.filter(item => {
             const itemIndex = areaOrder.indexOf(item.area);
+            
+            // Si el área está en la misma columna de fecha que el área actual
+            // (ej: Costura, Polos, Taller comparten 'costura')
+            // solo mostrar el área actual
+            if (item.mapping.dateField === currentAreaDateField && item.area !== currentArea) {
+                return false;
+            }
+            
+            // Si es una área diferente, mostrar solo si está antes o en el área actual
             return itemIndex <= currentAreaIndex;
         });
         
